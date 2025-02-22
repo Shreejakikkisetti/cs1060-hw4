@@ -25,21 +25,62 @@ VALID_MEASURES = {
     "Daily fine particulate matter"
 }
 
+def create_tables(cursor):
+    """Create the necessary tables"""
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS zip_county (
+            zip TEXT,
+            default_state TEXT,
+            county TEXT,
+            county_state TEXT,
+            state_abbreviation TEXT,
+            county_code TEXT,
+            zip_pop TEXT,
+            zip_pop_in_county TEXT,
+            n_counties TEXT,
+            default_city TEXT
+        )
+    ''')
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS county_health_rankings (
+            state TEXT,
+            county TEXT,
+            state_code TEXT,
+            county_code TEXT,
+            year_span TEXT,
+            measure_name TEXT,
+            measure_id TEXT,
+            numerator TEXT,
+            denominator TEXT,
+            raw_value TEXT,
+            confidence_interval_lower_bound TEXT,
+            confidence_interval_upper_bound TEXT,
+            data_release_year TEXT,
+            fipscode TEXT
+        )
+    ''')
+
 def load_csv_data(cursor, csv_path, table_name):
     """Load data from CSV file into SQLite table"""
     with open(csv_path, 'r', encoding='utf-8') as csvfile:
-        csv_reader = csv.reader(csvfile)
-        headers = [header.lower() for header in next(csv_reader)]
+        # Skip BOM if present
+        first_char = csvfile.read(1)
+        if first_char != '\ufeff':
+            csvfile.seek(0)
         
-        # Create table
-        columns = [f"{header} TEXT" for header in headers]
-        create_table_sql = f"CREATE TABLE IF NOT EXISTS {table_name} ({', '.join(columns)})"
-        cursor.execute(create_table_sql)
+        csv_reader = csv.reader(csvfile)
+        next(csv_reader)  # Skip header
         
         # Insert data in batches
         batch_size = 1000
         rows = []
-        placeholders = ','.join(['?' for _ in headers])
+        
+        if table_name == 'zip_county':
+            placeholders = ','.join(['?' for _ in range(10)])
+        else:
+            placeholders = ','.join(['?' for _ in range(14)])
+            
         insert_sql = f"INSERT INTO {table_name} VALUES ({placeholders})"
         
         for row in csv_reader:
@@ -55,6 +96,9 @@ def init_db():
     """Initialize in-memory database with data from CSV files"""
     conn = sqlite3.connect(':memory:')
     cursor = conn.cursor()
+    
+    # Create tables
+    create_tables(cursor)
     
     # Get the directory containing the CSV files
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
