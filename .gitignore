@@ -24,6 +24,9 @@ wheels/
 venv/
 ENV/
 env/
+.venv
+env.bak/
+venv.bak/
 
 # IDE
 .idea/
@@ -33,6 +36,8 @@ env/
 
 # SQLite
 *.db
+*.sqlite
+*.sqlite3
 
 # Vercel
 .vercel/
