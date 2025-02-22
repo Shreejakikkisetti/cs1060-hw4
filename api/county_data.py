@@ -5,7 +5,8 @@ Created with assistance from Codeium AI
 
 from flask import Flask, request, jsonify
 import sqlite3
-from .data import ZIP_DATA, HEALTH_DATA
+import os
+import csv
 
 app = Flask(__name__)
 
@@ -24,33 +25,47 @@ VALID_MEASURES = {
     "Daily fine particulate matter"
 }
 
+def load_csv_data(cursor, csv_path, table_name):
+    """Load data from CSV file into SQLite table"""
+    with open(csv_path, 'r', encoding='utf-8') as csvfile:
+        csv_reader = csv.reader(csvfile)
+        headers = [header.lower() for header in next(csv_reader)]
+        
+        # Create table
+        columns = [f"{header} TEXT" for header in headers]
+        create_table_sql = f"CREATE TABLE IF NOT EXISTS {table_name} ({', '.join(columns)})"
+        cursor.execute(create_table_sql)
+        
+        # Insert data in batches
+        batch_size = 1000
+        rows = []
+        placeholders = ','.join(['?' for _ in headers])
+        insert_sql = f"INSERT INTO {table_name} VALUES ({placeholders})"
+        
+        for row in csv_reader:
+            rows.append(row)
+            if len(rows) >= batch_size:
+                cursor.executemany(insert_sql, rows)
+                rows = []
+        
+        if rows:
+            cursor.executemany(insert_sql, rows)
+
 def init_db():
-    """Initialize in-memory database with real data"""
+    """Initialize in-memory database with data from CSV files"""
     conn = sqlite3.connect(':memory:')
     cursor = conn.cursor()
     
-    # Create zip_county table
-    cursor.execute('''
-        CREATE TABLE zip_county (
-            zip TEXT, default_state TEXT, county TEXT, county_state TEXT,
-            state_abbreviation TEXT, county_code TEXT, zip_pop TEXT,
-            zip_pop_in_county TEXT, n_counties TEXT, default_city TEXT
-        )
-    ''')
+    # Get the directory containing the CSV files
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     
-    # Create county_health_rankings table
-    cursor.execute('''
-        CREATE TABLE county_health_rankings (
-            state TEXT, county TEXT, state_code TEXT, county_code TEXT,
-            year_span TEXT, measure_name TEXT, measure_id TEXT, numerator TEXT,
-            denominator TEXT, raw_value TEXT, confidence_interval_lower_bound TEXT,
-            confidence_interval_upper_bound TEXT, data_release_year TEXT, fipscode TEXT
-        )
-    ''')
+    # Load zip_county data
+    zip_csv = os.path.join(base_dir, 'zip_county.csv')
+    load_csv_data(cursor, zip_csv, 'zip_county')
     
-    # Insert real data
-    cursor.executemany('INSERT INTO zip_county VALUES (?,?,?,?,?,?,?,?,?,?)', ZIP_DATA)
-    cursor.executemany('INSERT INTO county_health_rankings VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)', HEALTH_DATA)
+    # Load health rankings data
+    health_csv = os.path.join(base_dir, 'county_health_rankings.csv')
+    load_csv_data(cursor, health_csv, 'county_health_rankings')
     
     conn.commit()
     return conn
