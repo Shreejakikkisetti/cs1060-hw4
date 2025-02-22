@@ -36,6 +36,9 @@ def create_table_from_csv(cursor: sqlite3.Cursor, csv_path: str) -> None:
     Args:
         cursor: SQLite cursor
         csv_path (str): Path to the CSV file
+    Raises:
+        FileNotFoundError: If the CSV file doesn't exist
+        Exception: For other errors during processing
     """
     # Get the table name from the CSV filename without extension
     table_name = os.path.splitext(os.path.basename(csv_path))[0]
@@ -48,8 +51,6 @@ def create_table_from_csv(cursor: sqlite3.Cursor, csv_path: str) -> None:
             
             # Create SQL column definitions (all columns as TEXT)
             columns = [f"{header} TEXT" for header in headers]
-            
-            # Create table with the columns from CSV
             create_table_sql = f"CREATE TABLE IF NOT EXISTS {table_name} ({', '.join(columns)})"
             cursor.execute(create_table_sql)
             
@@ -70,10 +71,13 @@ def create_table_from_csv(cursor: sqlite3.Cursor, csv_path: str) -> None:
             # Insert any remaining rows
             if rows:
                 cursor.executemany(insert_sql, rows)
-            
+                
+    except FileNotFoundError:
+        print(f"Error: CSV file not found: {csv_path}", file=sys.stderr)
+        raise
     except Exception as e:
         print(f"Error processing {csv_path}: {str(e)}", file=sys.stderr)
-        sys.exit(1)
+        raise
 
 def main():
     """Main function to handle command line arguments and execute the conversion."""
@@ -90,20 +94,23 @@ def main():
             print(f"Error: CSV file '{csv_path}' not found", file=sys.stderr)
             sys.exit(1)
     
-    # Use a single database connection for all operations
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    
     try:
+        # Use a single database connection for all operations
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
         # Process each CSV file
         for csv_path in csv_files:
             create_table_from_csv(cursor, csv_path)
         
         # Commit all changes at once
         conn.commit()
-    finally:
-        # Always close the connection
         conn.close()
+        print(f"Successfully created database: {db_path}")
+        
+    except Exception as e:
+        print(f"Error: {str(e)}", file=sys.stderr)
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
